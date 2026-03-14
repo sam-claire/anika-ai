@@ -1,0 +1,72 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: appointments
+    // Fields:
+    //   - patientName: string (required)
+    //   - patientPhone: string (required)
+    //   - date: string (required, YYYY-MM-DD)
+    //   - time: string (required, HH:MM)
+    //   - reason: string (optional)
+    //   - status: string (required, enum: pending, confirmed, cancelled)
+    //   - createdAt: string (optional, ISO 8601)
+    //
+    // Collection: clinic_info
+    // Fields:
+    //   - name: string (required)
+    //   - address: string (optional)
+    //   - phone: string (optional)
+    //   - hours: string (optional)
+    //
+    // ===============================================================
+
+    // Helper Functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() &&
+        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' ||
+          (request.auth.token.email == "emondsabiniano@gmail.com" && request.auth.token.email_verified == true));
+    }
+
+    function isValidAppointment(data) {
+      return data.keys().hasAll(['patientName', 'patientPhone', 'date', 'time', 'status']) &&
+             data.patientName is string && data.patientName.size() > 0 && data.patientName.size() < 100 &&
+             data.patientPhone is string && data.patientPhone.size() > 0 && data.patientPhone.size() < 20 &&
+             data.date is string && data.date.matches("^\\d{4}-\\d{2}-\\d{2}$") &&
+             data.time is string && data.time.matches("^\\d{2}:\\d{2}$") &&
+             data.status in ['pending', 'confirmed', 'cancelled'] &&
+             (!('transcript' in data) || data.transcript is string);
+    }
+
+    match /appointments/{appointmentId} {
+      // Allow public creation (for patients booking via voice/web)
+      // In a real app, we might want to restrict this, but for a receptionist demo, 
+      // the "receptionist" (client-side) needs to be able to create these.
+      allow create: if isValidAppointment(request.resource.data);
+      
+      // Allow reading if authenticated or if it's the patient (though we don't have patient auth yet)
+      // For now, let's allow admins to read all, and others to read nothing unless we implement a "check my appointment" feature.
+      allow read: if isAdmin();
+      
+      // Only admins can update/delete appointments
+      allow update: if isAdmin() && isValidAppointment(request.resource.data);
+      allow delete: if isAdmin();
+    }
+
+    match /clinic_info/{infoId} {
+      allow read: if true; // Publicly readable clinic info
+      allow write: if isAdmin();
+    }
+    
+    match /users/{userId} {
+      allow read, write: if request.auth.uid == userId || isAdmin();
+    }
+  }
+}

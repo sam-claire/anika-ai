@@ -1,0 +1,9 @@
+{
+  "name": "Clinic Chat Concierge",
+  "description": "A professional chat-based concierge for medical clinics, powered by Bey Chat.",
+  "requestFramePermissions": [
+    "microphone",
+    "camera",
+    "geolocation"
+  ]
+}
